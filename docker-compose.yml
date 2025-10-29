@@ -1,0 +1,43 @@
+# Use a recent and stable version of the Docker Compose file format.
+version: '3.8'
+
+# Define the services (containers) that make up your application.
+services:
+  # Define the MySQL database service.
+  db:
+    # Use the official MySQL 8.0 image from Docker Hub.
+    image: mysql:8.0
+    
+    # This command sets the default authentication plugin.
+    # It's often needed for compatibility with older clients.
+    # command: --default-authentication-plugin=mysql_native_password
+    
+    # Always restart the container if it stops.
+    # This is useful for a database to ensure it's always running.
+    # restart: always
+    
+    # Set environment variables for the MySQL container.
+    # IMPORTANT: Change these passwords for any production use.
+    environment:
+      MYSQL_ROOT_PASSWORD: 'root' # Set the root password
+      MYSQL_DATABASE: 'compass_db'                         # Creates a new database named 'app_db'
+      MYSQL_USER: 'compass_db_user'                           # Creates a new user named 'app_user'
+      MYSQL_PASSWORD: 'compass_db_password'      # Sets the password for 'app_user'
+      
+    # Map a port from your host machine to the container.
+    # This lets you connect to the database from your computer on localhost:3306.
+    ports:
+      - '3306:3306'
+      
+    # This is the crucial part for data persistence.
+    # It maps the 'mysql_data' volume (defined below) to the directory
+    # inside the container where MySQL stores its data.
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+# Define the volumes that your services can use.
+volumes:
+  # This creates a named volume called 'mysql_data'. Docker manages this
+  # volume, and it will persist even if the 'db' container is removed.
+  mysql_data:
+
