@@ -13,6 +13,7 @@ import com.youchunmaru.db.data.app.Group
 import com.youchunmaru.util.DBPermissions
 import com.youchunmaru.util.PasswordEncoder
 import com.youchunmaru.util.getAuthUser
+import com.youchunmaru.util.getFilters
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -70,91 +71,98 @@ fun Application.configureSecurity(dbService: DBService) {
             cookie.extensions["SameSite"] = "lax"
         }
     }
-    routing {
-        post("/login") {
-            val user = call.receive<UserCredentials>()
-            var authorized = false
-            if(user.username.isNotEmpty() && user.password.isNotEmpty()) {
-                val dbUser = dbService.userService.readByUsernameWithRoleWithPermissions(user.username)
+    routing() {
+        route("/api-auth") {
 
-                if (dbUser != null) {
-                    if (PasswordEncoder.verifyPassword(user.password, dbUser.password)) {
-                        authorized = true
+            post("/login") {
+                val user = call.receive<UserCredentials>()
+                var authorized = false
+                if(user.username.isNotEmpty() && user.password.isNotEmpty()) {
+                    val dbUser = dbService.userService.readByUsernameWithRoleWithPermissions(user.username)
 
-                        val token = JWT.create()
-                            .withAudience(jwtAudience)
-                            .withIssuer(jwtIssuer)
-                            .withClaim("user", Json.encodeToString(dbUser))//save user in claim for trusted auth - user obj to skip db query
-                            .withExpiresAt(Date(System.currentTimeMillis() + millis30days))
-                            .sign(Algorithm.HMAC256(jwtSecret))
+                    if (dbUser != null) {
+                        if (PasswordEncoder.verifyPassword(user.password, dbUser.password)) {
+                            authorized = true
 
-                        call.respond(LoginResponse(token, dbUser.copy(password = "")))
-                    }
-                }
-            }
-            if(!authorized) {
-                call.respond(HttpStatusCode.Unauthorized, "Invalid username or password")
-            }
-        }
-        authenticate("auth-jwt") {
-            post("login/validate"){
-                val user = call.receive<User>()
-                val tokenUser = getAuthUser(call)
-                if(user.id == tokenUser?.id){
-                    call.respond(HttpStatusCode.OK)
-                }else {
-                    call.respond(HttpStatusCode.Unauthorized, "Invalid user")
-                }
-            }
-        }
+                            val token = JWT.create()
+                                .withAudience(jwtAudience)
+                                .withIssuer(jwtIssuer)
+                                .withClaim("user", Json.encodeToString(dbUser))//save user in claim for trusted auth - user obj to skip db query
+                                .withExpiresAt(Date(System.currentTimeMillis() + millis30days))
+                                .sign(Algorithm.HMAC256(jwtSecret))
 
-        get("/init/auth"){
-            val groups = dbService.groupService.readAll()
-            val users = dbService.userService.readAll()
-
-            if(groups.isEmpty() && users.isEmpty()) {
-                val token = JWT.create()
-                    .withAudience(jwtAudience)
-                    .withIssuer(jwtIssuer)
-                    .withClaim("username", "init")
-                    .withExpiresAt(Date(System.currentTimeMillis() + (millis30days / 30)))
-                    .sign(Algorithm.HMAC256(jwtSecret))
-
-                call.respond(LoginResponse(token, User(0, "init", "", Role(0, "INIT"))))
-            }else {
-                call.respond(HttpStatusCode.Forbidden, "App already initialized")
-            }
-
-        }
-        authenticate("auth-jwt-init") {
-            post("/init/{group}"){
-                val group = call.parameters["group"] ?: throw IllegalArgumentException("Invalid group name")
-                val groups = dbService.groupService.readAll()
-                if(groups.isEmpty()){
-
-                    val admin = call.receive<UserCredentials>()
-                    val role = Role(0, "ADMIN")
-                    val roleId = dbService.roleService.create(role)
-
-                    val id = dbService.userService.create(User(
-                        id = 0,
-                        username = admin.username,
-                        password = PasswordEncoder.encode(admin.password),
-                        role = role.copy(id = roleId.value)))
-
-                    for(dbPermission in DBPermissions.entries){
-                        dbService.permissionService.create(
-                            Permission(0, "${dbPermission.name}.*"))
-                        for(crudPermission in dbPermission.crudPermissions){
-                            dbService.permissionService.create(
-                                Permission(0, "${dbPermission.name}.${crudPermission.name}"))
+                            call.respond(LoginResponse(token, dbUser.copy(password = "")))
                         }
                     }
+                }
+                if(!authorized) {
+                    call.respond(HttpStatusCode.Unauthorized, "Invalid username or password")
+                }
+            }
+            authenticate("auth-jwt") {
+                get("/login/validate"){
+                    val user = getAuthUser(call)
 
-                    dbService.groupService.create(Group(0, group))
-                    call.respond(HttpStatusCode.Created, id)
+                    if(user == null) {
+                        call.respond(HttpStatusCode.Unauthorized, "Invalid token")
+                    } else {
+                        call.respond<User>(user)
+                    }
+                }
+                get("/logout") {
+                    //todo
+                    call.respond(HttpStatusCode.OK)
+                }
+            }
+
+            get("/init/auth"){
+                val groups = dbService.groupService.readAll()
+                val users = dbService.userService.readAll()
+
+                if(groups.isEmpty() && users.isEmpty()) {
+                    val token = JWT.create()
+                        .withAudience(jwtAudience)
+                        .withIssuer(jwtIssuer)
+                        .withClaim("username", "init")
+                        .withExpiresAt(Date(System.currentTimeMillis() + (millis30days / 30)))
+                        .sign(Algorithm.HMAC256(jwtSecret))
+
+                    call.respond(LoginResponse(token, User(0, "init", "", Role(0, "INIT"))))
                 }else {
                     call.respond(HttpStatusCode.Forbidden, "App already initialized")
+                }
+
+            }
+            authenticate("auth-jwt-init") {
+                post("/init/{group}"){
+                    val group = call.parameters["group"] ?: throw IllegalArgumentException("Invalid group name")
+                    val groups = dbService.groupService.readAll()
+                    if(groups.isEmpty()){
+
+                        val admin = call.receive<UserCredentials>()
+                        val role = Role(0, "ADMIN")
+                        val roleId = dbService.roleService.create(role)
+
+                        val id = dbService.userService.create(User(
+                            id = 0,
+                            username = admin.username,
+                            password = PasswordEncoder.encode(admin.password),
+                            role = role.copy(id = roleId.value)))
+
+                        for(dbPermission in DBPermissions.entries){
+                            dbService.permissionService.create(
+                                Permission(0, "${dbPermission.name}.*"))
+                            for(crudPermission in dbPermission.crudPermissions){
+                                dbService.permissionService.create(
+                                    Permission(0, "${dbPermission.name}.${crudPermission.name}"))
+                            }
+                        }
+
+                        dbService.groupService.create(Group(0, group))
+                        call.respond(HttpStatusCode.Created, id)
+                    }else {
+                        call.respond(HttpStatusCode.Forbidden, "App already initialized")
+                    }
                 }
             }
         }

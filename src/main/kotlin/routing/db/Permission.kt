@@ -16,53 +16,40 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import com.youchunmaru.util.create
+import com.youchunmaru.util.delete
+import com.youchunmaru.util.read
+import com.youchunmaru.util.readAll
+import com.youchunmaru.util.update
+import io.ktor.server.routing.Route
 
-fun Application.configurePermissionRouting(dbService: DBService) {
+fun Route.configurePermissionRouting(dbService: DBService) {
     val service = dbService.permissionService
-    routing {
-        authenticate("auth-jwt") {
-            route("/permissions") {
-                post("/create"){
-                    doAuthOperation("admin.admin", call, dbService) {
-                        val model = service.routingReceive(call)
-                        val id = service.create(model)
-                        call.respond(HttpStatusCode.Created, id.value)
-                    }
-                }
-                get("/{id}") {
-                    doAuthOperation("${DBPermissions.PERMISSIONS}.${CRUDPermissions.READ}", call, dbService) {
-                        val id = call.parameters["id"]?.toInt() ?: throw IllegalArgumentException("Invalid ID")
-                        val model = service.read(id)
-                        if (model != null) {
-                            call.respond(HttpStatusCode.OK, model)
-                        } else {
-                            call.respond(HttpStatusCode.NotFound)
-                        }
-                    }
-                }
-                put("/{id}") {
-                    doAuthOperation("admin.admin", call, dbService) {
-                        val id = call.parameters["id"]?.toInt() ?: throw IllegalArgumentException("Invalid ID")
-                        val model = service.routingReceive(call)
-                        service.update(id, model)
-                        call.respond(HttpStatusCode.OK)
-                    }
-                }
-                delete ("/{id}"){
-                    doAuthOperation("admin.admin", call, dbService) {
-                        val id = call.parameters["id"]?.toInt() ?: throw IllegalArgumentException("Invalid ID")
-                        service.delete(id)
-                        call.respond(HttpStatusCode.OK)
-                    }
-                }
-                get ("/all"){
-                    doAuthOperation("${DBPermissions.PERMISSIONS}.${CRUDPermissions.READ}", call, dbService) {
-                        val models = service.readAll()
-                        call.respond(HttpStatusCode.OK, models)
-                    }
-                }
+    route("/permissions") {
+        post("/create"){
+            doAuthOperation("${DBPermissions.PERMISSIONS}.${CRUDPermissions.CREATE}", call, dbService) {
+                create(service, call)
             }
         }
-
+        get("/{id}") {
+            doAuthOperation("${DBPermissions.PERMISSIONS}.${CRUDPermissions.READ}", call, dbService) {
+                read(service, call)
+            }
+        }
+        put("/{id}") {
+            doAuthOperation("${DBPermissions.PERMISSIONS}.${CRUDPermissions.UPDATE}", call, dbService) {
+                update(service, call)
+            }
+        }
+        delete ("/{id}"){
+            doAuthOperation("${DBPermissions.PERMISSIONS}.${CRUDPermissions.DELETE}", call, dbService) {
+                delete(service, call)
+            }
+        }
+        get ("/all"){
+            doAuthOperation("${DBPermissions.PERMISSIONS}.${CRUDPermissions.READ}", call, dbService) {
+                readAll(service, call)
+            }
+        }
     }
 }
