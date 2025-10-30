@@ -1,6 +1,7 @@
 package com.youchunmaru.util
 
 import com.youchunmaru.db.service.UserService
+import com.youchunmaru.db.service.app.GroupService
 import com.youchunmaru.db.service.app.SectionService
 import org.jetbrains.exposed.sql.Column
 
@@ -25,8 +26,7 @@ enum class CRUDPermissions() {
     DELETE
 }
 
-val test = listOf((UserService.Users.username to ""))
-
 enum class StringFilter(val column: Column<String>) {
-    SECTION_NAME(SectionService.Sections.name)
+    SECTION_NAME(SectionService.Sections.name),
+    GROUP_NAME(GroupService.Groups.name),
 }

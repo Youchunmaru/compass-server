@@ -31,7 +31,7 @@ fun checkPermission(role: Role, permission: String): Boolean {
     if (role.name == "ADMIN") {
         return true
     }
-    if (role.permissions.find { it.name == permission } != null) {
+    if (role.permissions.find { it.name == permission } != null) {//todo add parsing for filter
         return true
     }
     return role.permissions.find {it.name.split(".")[1] == "*"} != null
@@ -49,12 +49,22 @@ suspend fun doAuthOperation(permission: String, call: RoutingCall, dbService: DB
         call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
     }
 }
-
-fun getFilter(permission: String): Pair<Column<String>, String>{
-    val filterConfig = permission.split("(")[1]
+/**
+ * PERMISSION.SUB_PERMISSION(FILTER_1::VALUE_1,VALUE_2;FILTER_2::VALUE_3)
+ *
+ * only varchar columns are supported for filters
+ * */
+fun getFilters(permission: String): List<Pair<Column<String>, List<String>>>{//adds on top of the standard permission system
+    val filters = mutableListOf<Pair<Column<String>, List<String>>>()
+    val filterConfigs = permission.split("(")[1]
         .split(")")[0]
-        .split("::")
-    when (StringFilter.valueOf(filterConfig[0])) {
-        StringFilter.SECTION_NAME -> return (StringFilter.SECTION_NAME.column to filterConfig[1])
+        .split(";")
+    for (filterConfig in filterConfigs) {
+        if (filterConfig.isEmpty()) {
+            continue
+        }
+        val filter = filterConfig.split("::")
+        filters.add(StringFilter.valueOf(filter[0]).column to filter[1].split(","))
     }
+    return filters
 }
